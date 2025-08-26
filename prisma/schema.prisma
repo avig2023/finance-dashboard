@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id
+  email       String       @unique
+  createdAt   DateTime     @default(now())
+  connections Connection[]
+}
+
+model Connection {
+  id         String   @id @default(cuid())
+  userId     String
+  provider   String   // 'plaid' or 'teller'
+  itemId     String
+  tokenCt    Bytes    // encrypted access_token (ciphertext)
+  nonce      Bytes    // AES-GCM nonce
+  keyVersion Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
