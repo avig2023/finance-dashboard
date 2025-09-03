@@ -1,50 +1,57 @@
-import { NextResponse } from "next/server";
+// src/app/api/plaid/link/route.ts
+export const runtime = 'nodejs'; // ✅ Plaid SDK needs Node, not Edge
 
-export async function POST() {
-  const { PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV } = process.env as Record<string,string | undefined>;
+import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 
-  if (!PLAID_CLIENT_ID || !PLAID_SECRET) {
-    return NextResponse.json(
-      { ok: false, error: "Missing PLAID_CLIENT_ID or PLAID_SECRET", detail: null },
-      { status: 500 }
-    );
-  }
+function getPlaidClient() {
+  const env = (process.env.PLAID_ENV ?? 'sandbox').toLowerCase();
+  const basePath =
+    env === 'production' ? PlaidEnvironments.production :
+    env === 'development' ? PlaidEnvironments.development :
+    PlaidEnvironments.sandbox;
 
-  const base =
-    PLAID_ENV === "production"
-      ? "https://production.plaid.com"
-      : PLAID_ENV === "development"
-      ? "https://development.plaid.com"
-      : "https://sandbox.plaid.com";
-
-  const payload = {
-    client_id: PLAID_CLIENT_ID,
-    secret: PLAID_SECRET,
-    client_name: "Finance Dashboard",
-    user: { client_user_id: "demo-user" },
-    products: ["transactions"],
-    country_codes: ["US"],
-    language: "en",
-  };
-
-  const res = await fetch(`${base}/link/token/create`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "Plaid-Version": "2020-09-14",
+  const config = new Configuration({
+    basePath,
+    baseOptions: {
+      headers: {
+        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID ?? '',
+        'PLAID-SECRET': process.env.PLAID_SECRET ?? '',
+      },
     },
-    body: JSON.stringify(payload),
   });
 
-  let data: any = null;
-  try { data = await res.json(); } catch {}
+  return new PlaidApi(config);
+}
 
-  if (!res.ok) {
+export async function POST() {
+  try {
+    // (Optional) require auth if you want link tokens tied to a user
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+
+    const plaid = getPlaidClient();
+
+    // Create link token
+    const resp = await plaid.linkTokenCreate({
+      user: { client_user_id: userId },     // must be a non-empty string
+      client_name: 'Finance Dashboard',
+      products: ['transactions'],           // adjust to what your app uses
+      country_codes: ['US'],
+      language: 'en',
+      // redirect_uri: 'https://your-app-url/callback' // only if using OAuth
+    });
+
+    return NextResponse.json({ link_token: resp.data.link_token });
+  } catch (err: any) {
+    // ✅ Make errors visible in Vercel Runtime Logs
+    console.error('Plaid link token error:', err?.response?.data ?? err);
     return NextResponse.json(
-      { ok: false, error: data?.error_message || res.statusText, detail: data },
+      { error: 'link_token_failed', detail: err?.response?.data ?? String(err) },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ ok: true, link_token: data.link_token });
 }
