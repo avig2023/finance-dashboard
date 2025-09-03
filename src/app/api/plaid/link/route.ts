@@ -1,9 +1,15 @@
 // src/app/api/plaid/link/route.ts
-export const runtime = 'nodejs'; // ✅ Plaid SDK needs Node, not Edge
+export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+import {
+  Configuration,
+  PlaidApi,
+  PlaidEnvironments,
+  Products,      // ✅ enum
+  CountryCode,   // ✅ enum
+} from 'plaid';
 
 function getPlaidClient() {
   const env = (process.env.PLAID_ENV ?? 'sandbox').toLowerCase();
@@ -27,27 +33,22 @@ function getPlaidClient() {
 
 export async function POST() {
   try {
-    // (Optional) require auth if you want link tokens tied to a user
     const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
     const plaid = getPlaidClient();
 
-    // Create link token
     const resp = await plaid.linkTokenCreate({
-      user: { client_user_id: userId },     // must be a non-empty string
+      user: { client_user_id: userId },
       client_name: 'Finance Dashboard',
-      products: ['transactions'],           // adjust to what your app uses
-      country_codes: ['US'],
+      products: [Products.Transactions],     // ✅ enum, not 'transactions'
+      country_codes: [CountryCode.Us],       // ✅ enum, not 'US'
       language: 'en',
-      // redirect_uri: 'https://your-app-url/callback' // only if using OAuth
+      // redirect_uri: 'https://YOUR_URL/callback' // only if you use OAuth
     });
 
     return NextResponse.json({ link_token: resp.data.link_token });
   } catch (err: any) {
-    // ✅ Make errors visible in Vercel Runtime Logs
     console.error('Plaid link token error:', err?.response?.data ?? err);
     return NextResponse.json(
       { error: 'link_token_failed', detail: err?.response?.data ?? String(err) },
