@@ -8,17 +8,17 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isPublicRoute(req)) return;        // allow public routes
+  // allow public routes
+  if (isPublicRoute(req)) return;
 
-  // v6 pattern: read auth and redirect if not signed in
+  // require auth for everything else
   const { userId, redirectToSignIn } = await auth();
   if (!userId) {
-    return redirectToSignIn();           // sends to Clerk sign-in
+    // include returnBackUrl so user lands back on the page they wanted
+    return redirectToSignIn({ returnBackUrl: req.url });
   }
-  // otherwise continue
 });
 
-// Required matcher for the App Router
 export const config = {
   matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/(api|trpc)(.*)"],
 };
