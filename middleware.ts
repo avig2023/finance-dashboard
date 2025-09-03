@@ -1,12 +1,20 @@
 // middleware.ts
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-// Protect everything by default, but you can list public routes here.
-export default clerkMiddleware({
-  publicRoutes: ["/"], // add any paths that should be public
+// Public routes (add more as needed)
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  // "/api/health", // example
+]);
+
+export default clerkMiddleware((auth, req) => {
+  if (isPublicRoute(req)) return;    // allow public routes
+  auth().protect();                  // protect everything else
 });
 
-// Required matcher for app router (protects everything except assets/_next)
+// Required matcher for the App Router
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)", "/"],
+  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/(api|trpc)(.*)"],
 };
